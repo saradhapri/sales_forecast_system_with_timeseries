@@ -9,7 +9,7 @@ from src.notebook_api import (
 )
 
 st.set_page_config(page_title="Sales Forecast System", layout="wide")
-st.title("Sales Forecast System With Time Series")
+st.title("📈 Sales Forecast System With Time Series")
 
 # Sidebar about section
 with st.sidebar.expander("About this app"):
@@ -138,9 +138,10 @@ if st.sidebar.button("Run Forecast"):
                     from sklearn.metrics import mean_absolute_error, mean_squared_error
                     y_true = test['sales']
                     y_pred = forecast_df.loc[forecast_df['ds'].isin(test.index), 'yhat']
-                    mae = mean_absolute_error(y_true, y_pred)
-                    rmse = np.sqrt(mean_squared_error(y_true, y_pred))
-                    st.info(f"Test MAE: {mae:.2f}, Test RMSE: {rmse:.2f}")
+                    if len(y_true) == len(y_pred):
+                        mae = mean_absolute_error(y_true, y_pred)
+                        rmse = np.sqrt(mean_squared_error(y_true, y_pred))
+                        st.info(f"Test MAE: {mae:.2f}, Test RMSE: {rmse:.2f}")
                 csv = res.to_csv(index=False).encode('utf-8')
                 st.download_button("Download Forecast CSV", csv, f"forecast_store{store}_item{item}.csv")
             except Exception as e:
@@ -157,13 +158,21 @@ if st.sidebar.button("Run Forecast"):
             ax.plot(res['ds'], res['yhat'], '--o', color='red', label='ARIMA Forecast')
             ax.legend()
             st.pyplot(fig)
+            
+            # Fix evaluation: only evaluate if we have test data of matching length
             if test.shape[0] > 0:
                 from sklearn.metrics import mean_absolute_error, mean_squared_error
-                y_true = test['sales']
-                y_pred = preds[:len(test)]
-                mae = mean_absolute_error(y_true, y_pred)
-                rmse = np.sqrt(mean_squared_error(y_true, y_pred))
-                st.info(f"Test MAE: {mae:.2f}, Test RMSE: {rmse:.2f}")
+                # Fit ARIMA on train data and predict on test period
+                test_preds, _ = fit_arima_and_forecast(train['sales'], len(test))
+                if len(test_preds) == len(test):
+                    y_true = test['sales']
+                    y_pred = test_preds[:len(test)]  # Ensure matching length
+                    mae = mean_absolute_error(y_true, y_pred)
+                    rmse = np.sqrt(mean_squared_error(y_true, y_pred))
+                    st.info(f"Test MAE: {mae:.2f}, Test RMSE: {rmse:.2f}")
+                else:
+                    st.info("Test evaluation skipped due to length mismatch")
+            
             csv = res.to_csv(index=False).encode('utf-8')
             st.download_button("Download Forecast CSV", csv, f"arima_forecast_store{store}_item{item}.csv")
 
