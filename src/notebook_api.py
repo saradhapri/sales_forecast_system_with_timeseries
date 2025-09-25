@@ -5,6 +5,7 @@ from math import sqrt
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from sklearn.ensemble import RandomForestRegressor
 
+
 # try prophet/import fallbacks
 try:
     from prophet import Prophet
@@ -14,11 +15,6 @@ except Exception:
     except Exception:
         Prophet = None
 
-# try pmdarima (optional)
-try:
-    from pmdarima import auto_arima
-except Exception:
-    auto_arima = None
 
 # ---------- data utils ----------
 def load_data(filepath_or_buffer):
@@ -29,6 +25,7 @@ def load_data(filepath_or_buffer):
     df = pd.read_csv(filepath_or_buffer, parse_dates=['date'])
     return df
 
+
 def get_series(df, store_id, item_id, fillna_zero=True):
     """
     Filter df for a (store,item) and return a daily-frequency DataFrame with 'sales' column.
@@ -38,6 +35,7 @@ def get_series(df, store_id, item_id, fillna_zero=True):
     if fillna_zero:
         df_si['sales'] = df_si['sales'].fillna(0)
     return df_si
+
 
 # ---------- feature engineering ----------
 def create_features(series_df):
@@ -58,12 +56,14 @@ def create_features(series_df):
     s = s.dropna()
     return s
 
+
 def train_test_split_by_months(series_with_feats, test_months=3):
     last_date = series_with_feats.index.max()
     cutoff = last_date - pd.DateOffset(months=test_months)
     train = series_with_feats[series_with_feats.index <= cutoff]
     test = series_with_feats[series_with_feats.index > cutoff]
     return train, test
+
 
 # ---------- Prophet ----------
 def fit_prophet(series_df):
@@ -78,37 +78,73 @@ def fit_prophet(series_df):
     m.fit(df_prophet)
     return m, df_prophet
 
+
 def forecast_prophet(model, df_prophet, periods=30):
     future = model.make_future_dataframe(periods=periods, freq='D')
     forecast = model.predict(future)
     # return forecast DataFrame with ds,yhat,yhat_lower,yhat_upper
     return forecast[['ds','yhat','yhat_lower','yhat_upper']]
 
-# ---------- ARIMA (simple wrapper) ----------
+
+# ---------- ARIMA using statsmodels ----------
 def fit_arima_and_forecast(train_series, steps):
     """
-    Fit a simple ARIMA using statsmodels (or pmdarima auto_arima if available).
-    train_series: pd.Series (sales) indexed by date
-    steps: int forecast horizon
-    Returns forecast as numpy array and the fitted model object
+    Fit ARIMA model using statsmodels and forecast future values.
+    
+    Parameters:
+    - train_series: pandas Series with time series data
+    - steps: number of steps to forecast
+    
+    Returns:
+    - predictions: array of forecast values
+    - fitted_model: the fitted ARIMA model
     """
-    if auto_arima is not None:
-        step_model = auto_arima(train_series, seasonal=True, m=7, error_action='ignore', suppress_warnings=True)
-        preds = step_model.predict(n_periods=steps)
-        return preds, step_model
-    else:
-        # fallback: small ARIMA
-        from statsmodels.tsa.arima.model import ARIMA
-        model = ARIMA(train_series, order=(5,1,0))
-        res = model.fit()
-        preds = res.forecast(steps=steps)
-        return preds, res
+    from statsmodels.tsa.arima.model import ARIMA
+    from statsmodels.tsa.stattools import adfuller
+    import warnings
+    warnings.filterwarnings('ignore')
+    
+    # Check stationarity
+    def check_stationarity(ts):
+        try:
+            result = adfuller(ts.dropna())
+            return result[1] <= 0.05  # p-value <= 0.05 means stationary
+        except:
+            return False
+    
+    # Make series stationary if needed
+    d = 0
+    data = train_series.copy()
+    while not check_stationarity(data) and d < 2:
+        data = data.diff().dropna()
+        d += 1
+    
+    try:
+        # Try ARIMA with detected differencing
+        model = ARIMA(train_series, order=(1, d, 1))
+        fitted = model.fit()
+        predictions = fitted.forecast(steps=steps)
+        return predictions.values, fitted
+        
+    except Exception as e:
+        # Fallback: simple ARIMA(1,1,1)
+        try:
+            model = ARIMA(train_series, order=(1, 1, 1))
+            fitted = model.fit()
+            predictions = fitted.forecast(steps=steps)
+            return predictions.values, fitted
+        except:
+            # Ultimate fallback: return moving average
+            last_values = train_series.tail(7).mean()
+            return np.full(steps, last_values), None
+
 
 # ---------- Random Forest baseline ----------
 def train_rf(X_train, y_train, n_estimators=100):
     rf = RandomForestRegressor(n_estimators=n_estimators, random_state=42)
     rf.fit(X_train, y_train)
     return rf
+
 
 def rf_recursive_forecast(rf_model, last_known_row, feature_cols, periods):
     """
@@ -135,10 +171,12 @@ def rf_recursive_forecast(rf_model, last_known_row, feature_cols, periods):
             pass
     return preds
 
+
 # ---------- utility ----------
 def save_forecast_df(df_forecast, filename):
     df_forecast.to_csv(filename, index=False)
     return filename
+
 
 def evaluate_preds(y_true, y_pred):
     mae = mean_absolute_error(y_true, y_pred)
