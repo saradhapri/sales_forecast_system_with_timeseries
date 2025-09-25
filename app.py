@@ -9,7 +9,7 @@ from src.notebook_api import (
 )
 
 st.set_page_config(page_title="Sales Forecast System", layout="wide")
-st.title("📈 Sales Forecast System With Time Series")
+st.title("Sales Forecast System With Time Series")
 
 # Sidebar about section
 with st.sidebar.expander("About this app"):
