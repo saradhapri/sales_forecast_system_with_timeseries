@@ -1,8 +1,10 @@
-streamlit
-pandas
 numpy
+scipy
+Cython
+pandas
 matplotlib
 seaborn
+streamlit
 prophet
 scikit-learn
 statsmodels
