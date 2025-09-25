@@ -100,5 +100,3 @@ Data sourced from the Kaggle Store Item Demand Forecasting Challenge.
 ## License
 
 This project is for educational and demonstrational purposes.
-
-```
