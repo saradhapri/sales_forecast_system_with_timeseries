@@ -94,9 +94,11 @@ This application can be deployed on:
 
 Ensure all dependencies are installed in the deployment environment. Update the `data/train.csv` file path if necessary.
 
-**Acknowledgements:**  
+## Acknowledgements
+
 Data sourced from the Kaggle Store Item Demand Forecasting Challenge.
 
 ## License
 
 This project is for educational and demonstrational purposes.
+
